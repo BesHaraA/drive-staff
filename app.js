@@ -61,10 +61,10 @@ function sampleTrip() {
   return {
     title: '東京駅 → 箱根湯本（サンプル）', date: today(),
     points: [
-      { name: '東京駅', lat: 35.6812, lng: 139.7671, arr: '', dep: t(0) },
-      { name: '海老名SA（下り）', lat: 35.4489, lng: 139.3929, arr: t(50), dep: t(70) },
-      { name: '小田原城', lat: 35.2509, lng: 139.1535, arr: t(110), dep: t(150) },
-      { name: '箱根湯本駅', lat: 35.2325, lng: 139.1053, arr: t(170), dep: '' },
+      { name: '東京駅', lat: 35.6812, lng: 139.7671, addr: '東京駅　東京都千代田区丸の内', arr: '', dep: t(0) },
+      { name: '海老名SA（下り）', lat: 35.4316, lng: 139.4015, addr: '海老名SA (下り)　神奈川県海老名市大谷南', arr: t(50), dep: t(70) },
+      { name: '小田原城', lat: 35.2511, lng: 139.1534, addr: '小田原城天守閣　神奈川県小田原市城内', arr: t(110), dep: t(150) },
+      { name: '箱根湯本駅', lat: 35.2332, lng: 139.1035, addr: '箱根湯本駅　神奈川県足柄下郡箱根町', arr: t(170), dep: '' },
     ],
     log: {},
   };
@@ -306,19 +306,48 @@ function applyLayout() {
 $('layoutBtn').onclick = () => { layout = { auto: 'land', land: 'port', port: 'auto' }[layout]; store.set(LS_LAYOUT, layout); applyLayout(); };
 applyLayout();
 
+// ---- 地点の検索（地点名 → 場所） ----
+// 当面は OpenStreetMap（Nominatim）＋国土地理院の住所検索。Google の施設検索は API キーの準備後に差し替える（要件 Q18・C案）
+// Nominatim の利用規約に従い、1文字ごとの自動検索はせず、検索ボタンを押したときだけ問い合わせる
+const OSM_ATTR = '検索：© OpenStreetMap contributors／国土地理院';
+function fmtOsm(x) {
+  // 「海老名SA (下り), 987, 5丁目, 大谷南, 海老名市, 神奈川県, 243-0410, 日本」→ 名前と「神奈川県海老名市大谷南5丁目987」
+  const parts = x.display_name.split(',').map((s) => s.trim()).filter((s) => s && s !== '日本' && !/^\d{3}-\d{4}$/.test(s));
+  // 住所は大きい単位から並べ、重なり（「大谷」の次に「大谷南」など）と同じ語の繰り返しを除く
+  const a = parts.slice(1).reverse().filter((s, k, arr) => arr.indexOf(s) === k && !(arr[k + 1] && arr[k + 1].startsWith(s)));
+  return { name: parts[0], addr: a.join(''), lat: +x.lat, lng: +x.lon, src: 'OSM' };
+}
+async function searchPlaces(q) {
+  const near = pos ? `&viewbox=${pos.lng - 1},${pos.lat + 1},${pos.lng + 1},${pos.lat - 1}` : ''; // 今いる辺りを優先（範囲外も出す）
+  const osm = fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8&countrycodes=jp&accept-language=ja${near}&q=${encodeURIComponent(q)}`)
+    .then((r) => r.json()).then((a) => a.map(fmtOsm)).catch(() => []);
+  const gsi = fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`)
+    .then((r) => r.json()).then((a) => a.slice(0, 5).map((x) => ({ name: x.properties.title, addr: '（住所・地名）', lat: x.geometry.coordinates[1], lng: x.geometry.coordinates[0], src: '地理院' })))
+    .catch(() => []);
+  const [a, b] = await Promise.all([osm, gsi]);
+  return [...a, ...b];
+}
+
 // ---- 計画画面 ----
-let draft = null;
+let draft = null, results = {}; // results[地点番号] = 検索候補
 function renderPlan() {
   draft = draft || JSON.parse(JSON.stringify({ title: trip.title, date: trip.date, points: trip.points }));
   $('pTitle').value = draft.title; $('pDate').value = draft.date;
-  $('pList').innerHTML = draft.points.map((p, i) => `
-    <div class="pt" data-i="${i}">
-      <label class="full">地点名 <input data-f="name" value="${esc(p.name)}"></label>
-      <label class="full">座標（緯度, 経度） <input data-f="ll" inputmode="decimal" value="${p.lat}, ${p.lng}"></label>
+  $('pList').innerHTML = draft.points.map((p, i) => {
+    const set = p.lat != null && p.lng != null;
+    const cand = results[i];
+    return `
+    <div class="pt ${set ? '' : 'bad'}" data-i="${i}">
+      <div class="full kind">${i === 0 ? '出発地' : (i === draft.points.length - 1 ? '到着地' : `経由地 ${i}`)}</div>
+      <div class="full srow"><input data-f="name" value="${esc(p.name)}" placeholder="地点名・施設名・住所" enterkeyhint="search">
+        <button data-op="search">検索</button><button data-op="here" title="今いる場所を使う">現在地</button></div>
+      <div class="full place ${set ? 'ok' : 'ng'}">${set ? `📍 ${esc(p.addr || '場所を設定済み')}` : '場所が未設定です。検索して候補から選んでください'}</div>
+      ${cand ? `<div class="full cands">${cand.length ? cand.map((c, k) => `<button class="cand" data-op="pick" data-k="${k}"><b>${esc(c.name)}</b><span>${esc(c.addr)}</span></button>`).join('') : '<div class="none">見つかりませんでした。施設名を短くする、市町村名を付ける、住所で探す、を試してください</div>'}<div class="attr">${OSM_ATTR}</div></div>` : ''}
       <label>着（予定） <input data-f="arr" type="time" value="${p.arr}" ${i === 0 ? 'disabled' : ''}></label>
       <label>発（予定） <input data-f="dep" type="time" value="${p.dep}" ${i === draft.points.length - 1 ? 'disabled' : ''}></label>
       <div class="ops"><button data-op="up">↑</button><button data-op="down">↓</button><button data-op="del">削除</button></div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function readPlan() {
   draft.title = $('pTitle').value.trim() || '無題の行程'; draft.date = $('pDate').value || today();
@@ -326,25 +355,58 @@ function readPlan() {
   document.querySelectorAll('#pList .pt').forEach((el) => {
     const p = draft.points[+el.dataset.i];
     p.name = el.querySelector('[data-f=name]').value.trim() || '地点';
-    const m = el.querySelector('[data-f=ll]').value.match(/(-?\d+(?:\.\d+)?)\s*[,，\s]\s*(-?\d+(?:\.\d+)?)/);
-    if (m) { p.lat = +m[1]; p.lng = +m[2]; el.classList.remove('bad'); } else { ok = false; el.classList.add('bad'); }
     p.arr = el.querySelector('[data-f=arr]').value; p.dep = el.querySelector('[data-f=dep]').value;
+    if (p.lat == null || p.lng == null) ok = false;
   });
   return ok;
 }
-$('pList').onclick = (ev) => {
-  const op = ev.target.dataset.op; if (!op) return;
+async function doSearch(i) {
   readPlan();
-  const i = +ev.target.closest('.pt').dataset.i, a = draft.points;
-  if (op === 'del' && a.length > 2) a.splice(i, 1);
-  if (op === 'up' && i > 0) [a[i - 1], a[i]] = [a[i], a[i - 1]];
-  if (op === 'down' && i < a.length - 1) [a[i + 1], a[i]] = [a[i], a[i + 1]];
+  const q = draft.points[i].name;
+  if (!q || q === '地点' || q === '新しい地点') return;
+  results[i] = null; renderPlan();
+  const el = document.querySelector(`#pList .pt[data-i="${i}"] .place`); if (el) el.textContent = '検索中…';
+  results[i] = await searchPlaces(q);
+  diag(`地点検索「${q}」：${results[i].length}件`);
+  renderPlan();
+}
+$('pList').onclick = (ev) => {
+  const btn = ev.target.closest('button'); if (!btn) return;
+  const op = btn.dataset.op; if (!op) return;
+  const i = +btn.closest('.pt').dataset.i, a = draft.points;
+  if (op === 'search') { doSearch(i); return; }
+  readPlan();
+  if (op === 'pick') {
+    const c = results[i][+btn.dataset.k];
+    Object.assign(a[i], { lat: c.lat, lng: c.lng, addr: `${c.name}　${c.addr}` });
+    // 地点名が検索語のままなら、候補の名前で置き換える
+    if (!a[i].name || a[i].name === '地点' || a[i].name === '新しい地点') a[i].name = c.name;
+    delete results[i];
+  }
+  if (op === 'here') {
+    if (!pos) { const el = btn.closest('.pt').querySelector('.place'); el.textContent = '現在地がまだ取れていません（位置情報の許可を確認）'; return; }
+    Object.assign(a[i], { lat: pos.lat, lng: pos.lng, addr: `現在地（±${Math.round(pos.acc || 0)}m）` });
+    if (!a[i].name || a[i].name === '地点' || a[i].name === '新しい地点') a[i].name = '現在地';
+  }
+  if (op === 'del' && a.length > 2) { a.splice(i, 1); results = {}; }
+  if (op === 'up' && i > 0) { [a[i - 1], a[i]] = [a[i], a[i - 1]]; results = {}; }
+  if (op === 'down' && i < a.length - 1) { [a[i + 1], a[i]] = [a[i], a[i + 1]]; results = {}; }
   renderPlan();
 };
-$('pAdd').onclick = () => { readPlan(); const lp = draft.points[draft.points.length - 1]; draft.points.push({ name: '新しい地点', lat: lp.lat, lng: lp.lng, arr: '', dep: '' }); renderPlan(); };
-$('pSample').onclick = () => { const s = sampleTrip(); draft = { title: s.title, date: s.date, points: s.points }; renderPlan(); };
+// 地点名の欄で Enter（スマホのキーボードの「検索」）を押しても検索する
+$('pList').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && ev.target.dataset.f === 'name') { ev.preventDefault(); doSearch(+ev.target.closest('.pt').dataset.i); }
+});
+$('pAdd').onclick = () => {
+  readPlan();
+  // 到着地の手前に経由地を足す
+  draft.points.splice(draft.points.length - 1, 0, { name: '', lat: null, lng: null, arr: '', dep: '' });
+  results = {}; renderPlan();
+};
+$('pSample').onclick = () => { const s = sampleTrip(); draft = { title: s.title, date: s.date, points: s.points }; results = {}; renderPlan(); };
 $('pSave').onclick = () => {
-  if (!readPlan()) return; // 座標が読めない地点は赤枠にして保存しない
+  if (!readPlan()) { renderPlan(); $('planMsg').textContent = '場所が未設定の地点（赤枠）があります。検索して候補から選んでください'; return; }
+  $('planMsg').textContent = '';
   trip = { title: draft.title, date: draft.date, points: draft.points, log: {} };
   saveTrip(); draft = null; diag(`行程を保存：${trip.title}（${trip.points.length}地点・走行記録はリセット）`);
   if (SIM) simReset();

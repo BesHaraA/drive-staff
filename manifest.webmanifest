@@ -1,0 +1,17 @@
+{
+  "name": "ドライブスタフ",
+  "short_name": "スタフ",
+  "description": "運行スタフ方式の運転支援（予定との差・到着出発の記録・ナビ受け渡し）",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1419",
+  "theme_color": "#0f1419",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0f1419">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="スタフ">
+<title>ドライブスタフ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- 上部の帯：行程名・時刻 -->
+  <header class="bar">
+    <span class="ttl" id="tripTitle">—</span>
+    <span class="chip" id="simChip" hidden>シミュレーション</span>
+    <span class="spacer"></span>
+    <span class="gps" id="gpsState">GPS —</span>
+    <span class="clk" id="clock">--:--</span>
+  </header>
+
+  <!-- 走行画面 -->
+  <main id="viewRun" class="view on">
+    <section class="next" id="nextPane">
+      <div class="status" id="status"><span class="big">—</span><span class="sub"></span></div>
+      <div class="nextcard">
+        <div class="lbl">次の地点</div>
+        <div class="nm" id="nextName">—</div>
+        <div class="row"><span id="nextDist">— km</span><span id="nextEta">見込み —</span></div>
+      </div>
+      <button class="navbtn" id="navBtn">▶ Googleマップでナビ</button>
+      <div class="hint" id="navHint">ナビ開始後、この画面に戻ってください（案内の音声はGoogleマップが続けます）</div>
+    </section>
+    <section class="staff">
+      <table class="tt" id="staffTable"></table>
+      <div class="actbar" id="actbar">
+        <button class="a2" id="btnArr">到着</button>
+        <button class="a2" id="btnDep">出発</button>
+        <button class="a2" id="btnRest" disabled title="段階2で実装">休憩</button>
+        <span class="lock" id="lockNote">🔒走行中</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- 計画画面 -->
+  <main id="viewPlan" class="view">
+    <div class="planhead">
+      <label>行程名 <input id="pTitle" type="text"></label>
+      <label>日付 <input id="pDate" type="date"></label>
+    </div>
+    <div id="pList"></div>
+    <div class="planbtns">
+      <button id="pAdd">＋ 地点を追加</button>
+      <button id="pSample">サンプルを読み込む</button>
+      <button id="pSave" class="primary">保存して走行画面へ</button>
+    </div>
+    <p class="help">座標は Google マップで地点を長押しすると出る「35.6812, 139.7671」の形をそのまま貼り付けてください。予定時刻は 24 時間表記（例：9:50）。出発地は「発」だけ、到着地は「着」だけで構いません。</p>
+  </main>
+
+  <!-- 診断画面（実機確認 T1〜T7 用） -->
+  <main id="viewDiag" class="view">
+    <div class="diag" id="diagSummary"></div>
+    <div class="planbtns">
+      <button id="dCopy">記録をコピー</button>
+      <button id="dClear">記録を消す</button>
+      <button id="dReset">走行記録をリセット</button>
+    </div>
+    <pre class="diaglog" id="diagLog"></pre>
+  </main>
+
+  <!-- シミュレーション操作（?sim=1 のときだけ表示） -->
+  <div class="simbar" id="simBar" hidden>
+    <span>速さ</span>
+    <button data-x="1">×1</button><button data-x="10">×10</button><button data-x="60" class="on">×60</button>
+    <button id="simPause">一時停止</button>
+    <button id="simDelay">渋滞 +10分</button>
+  </div>
+
+  <!-- 下部メニュー -->
+  <nav class="foot">
+    <button data-v="viewRun" class="on">スタフ</button>
+    <button data-v="viewPlan">計画</button>
+    <button data-v="viewDiag">診断</button>
+    <button id="layoutBtn">縦横</button>
+  </nav>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

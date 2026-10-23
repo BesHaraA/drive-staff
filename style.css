@@ -1,0 +1,99 @@
+/* ドライブスタフ 段階1 — 色は意味ごとに固定（定時=緑・遅れ=赤・早着=青・停車=灰） */
+:root{
+  --bg:#0f1419; --bg2:#182029; --line:#2c3744; --txt:#e6edf3; --dim:#8b98a5;
+  --ok:#2ea043; --late:#da3633; --early:#388bfd; --acc:#58a6ff; --warn:#d29922;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;overflow-x:hidden}
+body{overscroll-behavior:none}
+#app{display:flex;flex-direction:column;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+button{font:inherit;color:inherit;background:#30363d;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button:disabled{opacity:.35;cursor:default}
+input{font:inherit;color:var(--txt);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+
+.bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#0a0e12;border-bottom:1px solid var(--line);font-size:14px}
+.bar > *{flex-shrink:0}
+.bar .ttl{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.bar .spacer{flex:1 1 0}
+.bar .gps{font-size:12px;color:var(--dim)}
+.bar .gps.ok{color:var(--ok)}.bar .gps.ng{color:var(--late)}
+.bar .clk{font-weight:700;font-variant-numeric:tabular-nums;font-size:16px}
+.chip{font-size:11px;padding:1px 8px;border-radius:10px;background:#3b2f12;color:#f2cc60}
+
+.view{display:none;flex:1;min-height:0}
+.view.on{display:flex}
+#viewRun{flex-direction:row}
+#viewPlan,#viewDiag{flex-direction:column;overflow-y:auto;padding:10px}
+
+/* 走行画面：横置き＝左右、縦置き＝上下 */
+.next{flex:1;display:flex;flex-direction:column;gap:10px;padding:10px;min-width:0;border-right:1px solid var(--line)}
+.staff{flex:1.3;display:flex;flex-direction:column;min-width:0;min-height:0}
+@media (orientation:portrait){ #viewRun{flex-direction:column} .next{flex:0 0 auto;border-right:none;border-bottom:1px solid var(--line)} }
+body.force-land #viewRun{flex-direction:row} body.force-land .next{flex:1;border-right:1px solid var(--line);border-bottom:none}
+body.force-port #viewRun{flex-direction:column} body.force-port .next{flex:0 0 auto;border-right:none;border-bottom:1px solid var(--line)}
+
+.status{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px;border-left:8px solid var(--dim);background:rgba(139,152,165,.14)}
+.status .big{font-size:32px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums}
+.status .sub{font-size:13px;color:var(--dim)}
+.status.ok{border-color:var(--ok);background:rgba(46,160,67,.16)} .status.ok .big{color:#56d364}
+.status.late{border-color:var(--late);background:rgba(218,54,51,.18)} .status.late .big{color:#ff6b66}
+.status.early{border-color:var(--early);background:rgba(56,139,253,.16)} .status.early .big{color:#79b8ff}
+
+.nextcard{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.nextcard .lbl{font-size:12px;color:var(--dim)}
+.nextcard .nm{font-size:22px;font-weight:700;margin:2px 0 4px}
+.nextcard .row{display:flex;justify-content:space-between;font-size:16px;font-variant-numeric:tabular-nums}
+.navbtn{background:#1a73e8;border-color:#1a73e8;color:#fff;font-weight:700;font-size:17px;padding:12px;border-radius:24px}
+.hint{font-size:11px;color:var(--dim)}
+
+table.tt{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.tt th{font-size:11px;color:var(--dim);font-weight:normal;text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
+.tt td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:15px;white-space:nowrap}
+.tt td.nm{white-space:normal}
+.tt .k{display:block;font-size:11px;color:var(--dim)}
+.tt tr.done td{color:#56616d}
+.tt tr.cur td{background:rgba(88,166,255,.16)}
+.tt .t{font-weight:700}
+.c-ok{color:#56d364}.c-late{color:#ff6b66}.c-early{color:#79b8ff}
+.staff .tt{flex:0 0 auto}
+.planhead label{min-width:0}
+/* 幅の狭いスマホ（縦置き）では表と帯を詰める */
+@media (max-width:480px){
+  .tt td{padding:6px 5px;font-size:14px} .tt th{padding:4px 5px}
+  .status .big{font-size:26px} .nextcard .nm{font-size:19px}
+  .actbar .a2.big{font-size:16px}
+}
+.staff{overflow-y:auto}
+
+.actbar{display:flex;gap:8px;padding:8px;margin-top:auto;border-top:1px solid var(--line);align-items:center;background:var(--bg)}
+.actbar .a2{flex:1;padding:12px 0;font-weight:700;font-size:15px}
+.actbar .a2.big{flex:3;font-size:19px;padding:16px 0;background:#163a73;border-color:#1f6feb;color:#cfe2ff}
+.actbar .a2.go{background:var(--ok);border-color:var(--ok);color:#fff}
+.actbar .lock{font-size:11px;color:var(--dim);white-space:nowrap}
+
+.foot{display:flex;border-top:1px solid var(--line);background:#0a0e12}
+.foot button{flex:1;border:none;border-radius:0;background:none;padding:10px 0;font-size:13px;color:var(--dim)}
+.foot button.on{color:var(--acc)}
+
+/* 計画画面 */
+.planhead{display:flex;gap:10px;margin-bottom:8px}
+.planhead label{flex:1;font-size:12px;color:var(--dim)}
+.pt{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px}
+.pt .full{grid-column:1/3}
+.pt label{font-size:11px;color:var(--dim)}
+.pt .ops{grid-column:1/3;display:flex;gap:6px;justify-content:flex-end}
+.pt .ops button{padding:4px 10px;font-size:12px}
+.pt.bad{border-color:var(--late)}
+.planbtns{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.planbtns .primary{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:700}
+.help{font-size:12px;color:var(--dim);line-height:1.6}
+
+/* 診断画面 */
+.diag{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;background:var(--bg2);border-radius:8px;padding:10px}
+.diag b{color:var(--dim);font-weight:normal}
+.diaglog{font-size:11px;color:var(--dim);white-space:pre-wrap;background:#0a0e12;border-radius:8px;padding:8px;margin:0}
+
+/* シミュレーション操作 */
+.simbar{display:flex;gap:6px;align-items:center;padding:6px 10px;background:#2a2312;font-size:12px;flex-wrap:wrap}
+.simbar button{padding:4px 10px;font-size:12px}
+.simbar button.on{background:#f2cc60;color:#111}

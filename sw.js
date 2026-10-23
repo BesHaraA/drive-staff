@@ -1,5 +1,5 @@
 // オフライン用のキャッシュ。ファイルを更新したら VERSION を上げる（古いキャッシュが消える）
-const VERSION = 'ds-v2';
+const VERSION = 'ds-v3';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
 
 self.addEventListener('install', (e) => {

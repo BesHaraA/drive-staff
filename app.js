@@ -89,26 +89,43 @@ function current() {
 
 // ---- GPS と走行状態 ----
 let pos = null, prevPos = null, moving = false, speedKmh = null, nearStopSince = null, nearEnter = null;
+let fastSince = null; // 基準の速さを超え始めた時刻
+const MOVING_CONFIRM_MS = 5000; // この時間続けて基準を超えたら走行開始とみなす（一瞬の揺れで出発にしない）
+const WINDOW_MS = 5000;         // 「5秒以上前の位置からどれだけ進んだか」で速さを測る（行ったり来たりの揺れを打ち消す）
+let recent = [];                // 直近30秒の位置
 const gps = { fixes: 0, lastGapS: null, maxGapS: 0, acc: null, err: null };
 
+// 5秒以上前の位置から測った速さ（m/秒）。誤差の範囲内しか進んでいなければ 0。比べる位置が無ければ null
+function windowSpeed(p) {
+  let old = null;
+  for (let k = recent.length - 1; k >= 0; k--) if (p.ts - recent[k].ts >= WINDOW_MS) { old = recent[k]; break; }
+  if (!old) return null;
+  // 揺れの許容幅は「2点の精度の和の1.5倍」（行ったり来たりの揺れを走行と誤らない）
+  const d = distM(old, p), noise = Math.max(30, 1.5 * ((p.acc || 0) + (old.acc || 0)));
+  return d > noise ? d / ((p.ts - old.ts) / 1000) : 0;
+}
+
 function onPosition(p) {
-  // p = { lat, lng, acc, spd(m/秒 または null), ts }
+  // p = { lat, lng, acc, spd(端末が返す速さ m/秒 または null), ts }
+  let afterGap = false;
   if (pos) {
     const gap = (p.ts - pos.ts) / 1000;
     gps.lastGapS = gap; if (gap > gps.maxGapS) gps.maxGapS = gap;
-    if (!SIM && gap > 30) diag(`GPS の更新が ${Math.round(gap)} 秒途切れた`);
-    // 端末が速度を返さないときは移動距離から求める。ただし移動が位置の誤差の範囲内なら止まっているとみなす（GPS の揺れ対策）
-    if (p.spd == null && gap > 0) {
-      const moved = distM(pos, p), noise = Math.max(20, (p.acc || 0) + (pos.acc || 0));
-      p.spd = moved > noise ? moved / gap : 0;
-    }
+    if (!SIM && gap > 30) { diag(`GPS の更新が ${Math.round(gap)} 秒途切れた（再取得直後の位置は判定に使わない）`); afterGap = true; recent = []; }
   }
+  const ws = windowSpeed(p);
+  recent.push({ lat: p.lat, lng: p.lng, acc: p.acc, ts: p.ts });
+  recent = recent.filter((r) => p.ts - r.ts <= 30e3);
   prevPos = pos; pos = p;
   gps.fixes++; gps.acc = p.acc; gps.err = null;
   const wasMoving = moving;
-  // 精度が粗い（±50m超）ときに端末が返す速度は当てにならないので、走行の判定に使わない
-  moving = (p.spd || 0) > MOVING_MS && (SIM || (p.acc || 0) <= 50);
-  if (moving) { const k = p.spd * 3.6; speedKmh = speedKmh == null ? k : speedKmh * 0.9 + k * 0.1; }
+  // 走行の判定：精度が±50m以内で、速さが基準を超え、それが5秒続いたとき（途切れ直後・精度が粗いときは判定しない）
+  // 速さは端末の値（衛星の電波から測るので揺れに強い）を優先し、端末が値を出さないときだけ5秒前の位置との比較を使う
+  const spd = SIM ? p.spd : (p.spd != null ? p.spd : (ws ?? 0));
+  const fast = !afterGap && spd > MOVING_MS && (SIM || (p.acc || 0) <= 50);
+  if (fast) { if (fastSince == null) fastSince = p.ts; } else fastSince = null;
+  moving = fast && (SIM || p.ts - fastSince >= MOVING_CONFIRM_MS);
+  if (moving) { const k = spd * 3.6; speedKmh = speedKmh == null ? k : speedKmh * 0.9 + k * 0.1; }
   if (wasMoving !== moving) diag(moving ? '走行開始' : '停車');
   autoJudge();
   render();
@@ -377,6 +394,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') keepAwake();
 });
 document.addEventListener('click', keepAwake, { once: true });
+// 画面分割で相手のアプリを操作している状態（表示は続いている）を、「裏に回った」と区別して記録する
+window.addEventListener('blur', () => { if (document.visibilityState === 'visible') diag('操作の対象が他のアプリへ（表示は継続・画面分割など）'); });
+window.addEventListener('focus', () => diag('操作の対象がこのアプリに戻った'));
 
 // ---- GPS（実機） ----
 function startGps() {

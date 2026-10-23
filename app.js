@@ -50,15 +50,21 @@ function distM(a, b) {
 }
 
 // ---- 行程 ----
-// サンプルは公共の場所のみ（自宅などは入れない）
+// サンプルは公共の場所のみ（自宅などは入れない）。時刻は「今から15分後に出発」に合わせる
+// （シミュレーションでは 8:00 発に固定して、確認のたびに同じ動きになるようにする）
 function sampleTrip() {
+  const d = new Date();
+  let start = SIM ? 8 * 60 : d.getHours() * 60 + d.getMinutes() + 15;
+  start = Math.ceil(start / 5) * 5;
+  if (start + 170 >= 24 * 60) start = 8 * 60; // 日をまたぐ場合は翌日扱いにせず 8:00 発にする
+  const t = (m) => `${pad(Math.floor((start + m) / 60))}:${pad((start + m) % 60)}`;
   return {
     title: '東京駅 → 箱根湯本（サンプル）', date: today(),
     points: [
-      { name: '東京駅', lat: 35.6812, lng: 139.7671, arr: '', dep: '08:00' },
-      { name: '海老名SA（下り）', lat: 35.4489, lng: 139.3929, arr: '08:50', dep: '09:10' },
-      { name: '小田原城', lat: 35.2509, lng: 139.1535, arr: '09:50', dep: '10:30' },
-      { name: '箱根湯本駅', lat: 35.2325, lng: 139.1053, arr: '10:50', dep: '' },
+      { name: '東京駅', lat: 35.6812, lng: 139.7671, arr: '', dep: t(0) },
+      { name: '海老名SA（下り）', lat: 35.4489, lng: 139.3929, arr: t(50), dep: t(70) },
+      { name: '小田原城', lat: 35.2509, lng: 139.1535, arr: t(110), dep: t(150) },
+      { name: '箱根湯本駅', lat: 35.2325, lng: 139.1053, arr: t(170), dep: '' },
     ],
     log: {},
   };
@@ -91,12 +97,17 @@ function onPosition(p) {
     const gap = (p.ts - pos.ts) / 1000;
     gps.lastGapS = gap; if (gap > gps.maxGapS) gps.maxGapS = gap;
     if (!SIM && gap > 30) diag(`GPS の更新が ${Math.round(gap)} 秒途切れた`);
-    if (p.spd == null && gap > 0) p.spd = distM(pos, p) / gap;
+    // 端末が速度を返さないときは移動距離から求める。ただし移動が位置の誤差の範囲内なら止まっているとみなす（GPS の揺れ対策）
+    if (p.spd == null && gap > 0) {
+      const moved = distM(pos, p), noise = Math.max(20, (p.acc || 0) + (pos.acc || 0));
+      p.spd = moved > noise ? moved / gap : 0;
+    }
   }
   prevPos = pos; pos = p;
   gps.fixes++; gps.acc = p.acc; gps.err = null;
   const wasMoving = moving;
-  moving = (p.spd || 0) > MOVING_MS;
+  // 精度が粗い（±50m超）ときに端末が返す速度は当てにならないので、走行の判定に使わない
+  moving = (p.spd || 0) > MOVING_MS && (SIM || (p.acc || 0) <= 50);
   if (moving) { const k = p.spd * 3.6; speedKmh = speedKmh == null ? k : speedKmh * 0.9 + k * 0.1; }
   if (wasMoving !== moving) diag(moving ? '走行開始' : '停車');
   autoJudge();
@@ -198,7 +209,9 @@ function render() {
     if (Math.abs(m) <= ONTIME_MIN) { cls = 'ok'; big = '定時'; }
     else if (m > 0) { cls = 'late'; big = `${m}分遅れ`; }
     else { cls = 'early'; big = `${-m}分早い`; }
-    sub = `次：${cp.name}<br>見込み ${fmt(est[c.i].arr)} 着（予定 ${fmt(plannedArr(c.i))}）`;
+    const dk = pos ? distM(pos, cp) : null; // 高さが足りないと「次の地点」欄を隠すので、帯にも距離を出す
+    const dTxt = dk == null ? '' : (dk < 1000 ? `（あと ${Math.round(dk)} m）` : `（あと ${(dk * ROUTE_FACTOR / 1000).toFixed(1)} km）`);
+    sub = `次：${cp.name}${dTxt}<br>見込み ${fmt(est[c.i].arr)} 着（予定 ${fmt(plannedArr(c.i))}）`;
   }
   $('status').className = 'status ' + cls;
   $('status').innerHTML = `<span class="big">${big}</span><span class="sub">${sub}</span>`;

@@ -4,6 +4,7 @@
   --ok:#2ea043; --late:#da3633; --early:#388bfd; --acc:#58a6ff; --warn:#d29922;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important} /* display を指定した部品でも hidden 属性で確実に隠す */
 html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;overflow-x:hidden}
 body{overscroll-behavior:none}
 #app{display:flex;flex-direction:column;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
@@ -57,13 +58,26 @@ table.tt{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .c-ok{color:#56d364}.c-late{color:#ff6b66}.c-early{color:#79b8ff}
 .staff .tt{flex:0 0 auto}
 .planhead label{min-width:0}
+/* 高さが足りないとき（Android の画面分割・横置き）：次の地点の欄と説明を省き、表と操作バーを必ず見せる */
+@media (max-height:620px){
+  .nextcard,.hint{display:none}
+  .next{gap:6px;padding:6px 8px}
+  .status{padding:6px 10px} .status .big{font-size:24px} .status .sub{font-size:12px}
+  .navbtn{font-size:15px;padding:8px}
+  .tt td{padding:5px 6px;font-size:14px}
+  .actbar{padding:5px 8px} .actbar .a2{padding:9px 0} .actbar .a2.big{padding:11px 0;font-size:16px}
+  .foot button{padding:7px 0}
+}
 /* 幅の狭いスマホ（縦置き）では表と帯を詰める */
 @media (max-width:480px){
   .tt td{padding:6px 5px;font-size:14px} .tt th{padding:4px 5px}
   .status .big{font-size:26px} .nextcard .nm{font-size:19px}
   .actbar .a2.big{font-size:16px}
 }
-.staff{overflow-y:auto}
+/* 表だけをスクロールさせ、操作バーは常に見える位置に固定する（要件 Q13） */
+.ttwrap{flex:1 1 auto;min-height:0;overflow-y:auto}
+.staff{overflow:hidden}
+.actbar{flex:0 0 auto}
 
 .actbar{display:flex;gap:8px;padding:8px;margin-top:auto;border-top:1px solid var(--line);align-items:center;background:var(--bg)}
 .actbar .a2{flex:1;padding:12px 0;font-weight:700;font-size:15px}
